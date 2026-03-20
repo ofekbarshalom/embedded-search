@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Embedded Search</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#08090d">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #08090d;
+            --surface: rgba(255,255,255,0.04);
+            --surface-hover: rgba(255,255,255,0.07);
+            --surface-glass: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+            --border-hover: rgba(255,255,255,0.15);
+            --text: #e4e4e7;
+            --text-dim: #71717a;
+            --text-muted: #52525b;
+            --accent: #818cf8;
+            --accent-glow: rgba(129,140,248,0.25);
+            --cyan: #22d3ee;
+            --emerald: #34d399;
+            --amber: #fbbf24;
+            --rose: #fb7185;
+            --violet: #a78bfa;
+            --orange: #fb923c;
+            --radius: 16px;
+            --radius-sm: 10px;
+            --font: 'DM Sans', sans-serif;
+            --mono: 'JetBrains Mono', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Three.js dotted surface container */
+        #dotted-surface {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Radial vignette over the 3D scene */
+        .dotted-overlay {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse at 50% 40%, transparent 0%, var(--bg) 75%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app {
+            position: relative;
+            z-index: 1;
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 48px 24px 80px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .logo-icon canvas {
+            width: 40px;
+            height: 40px;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            color: #fff;
+        }
+
+        .header .subtitle {
+            color: var(--text-dim);
+            font-size: 15px;
+            font-weight: 400;
+            margin-top: 4px;
+        }
+
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 36px;
+        }
+
+        .stat-card {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            padding: 12px 16px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .stat-card:hover {
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .stat-icon svg {
+            width: 22px;
+            height: 22px;
+            stroke: rgba(255, 255, 255, 0.7);
+            stroke-width: 1.5;
+            fill: none;
+        }
+
+        .stat-value {
+            font-size: 16px;
+            font-weight: 600;
+            font-family: var(--mono);
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .stat-label {
+            font-size: 10px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        /* Scan panel */
+        .scan-panel {
+            margin-bottom: 36px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+        }
+
+        .scan-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-family: var(--font);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        .scan-toggle:hover { background: var(--surface-hover); }
+
+        .scan-toggle-icon {
+            transition: transform 0.25s;
+            color: var(--text-dim);
+            font-size: 12px;
+        }
+
+        .scan-panel.open .scan-toggle-icon { transform: rotate(180deg); }
+
+        .scan-body {
+            padding: 0 20px;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1), padding 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .scan-panel.open .scan-body {
+            max-height: 500px;
+            padding: 12px 20px 20px;
+        }
+
+        .scan-info {
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .scan-info strong { color: var(--text); font-weight: 600; }
+
+        .scan-actions {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .scan-btn {
+            flex: 1;
+            padding: 10px 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: transparent;
+            color: rgba(255,255,255,0.8);
+            font-family: var(--font);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .scan-btn:hover {
+            border-color: rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.06);
+            color: #fff;
+        }
+
+        .scan-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .scan-btn .scan-btn-sub {
+            display: block;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 3px;
+            font-weight: 400;
+        }
+
+        .scan-progress-wrap {
+            display: none;
+        }
+
+        .scan-progress-wrap.active { display: block; }
+
+        .scan-progress-bar-bg {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .scan-progress-bar {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+
+        .scan-progress-bar.done { background: var(--emerald); }
+
+        .scan-progress-details {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-dim);
+            font-family: var(--mono);
+        }
+
+        .scan-current-file {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: var(--mono);
+            margin-top: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .scan-done-msg {
+            display: none;
+            font-size: 13px;
+            color: var(--emerald);
+            margin-top: 10px;
+        }
+
+        .scan-done-msg.active { display: block; }
+
+        .scan-error-msg {
+            display: none;
+            font-size: 13px;
+            color: var(--rose);
+            margin-top: 10px;
+        }
+
+        .scan-error-msg.active { display: block; }
+
+        .scan-dir-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .scan-dir-input {
+            flex: 1;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            color: #fff;
+            font-family: var(--mono);
+            font-size: 12px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .scan-dir-input:focus { border-color: rgba(255,255,255,0.35); }
+
+        .scan-dir-btn {
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: transparent;
+            color: rgba(255,255,255,0.7);
+            font-family: var(--font);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .scan-dir-btn:hover {
+            border-color: rgba(255,255,255,0.3);
+            color: #fff;
+        }
+
+        .scan-dir-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Search — tag input */
+        .search-wrap {
+            position: relative;
+            margin-bottom: 14px;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+            min-height: 44px;
+            padding: 4px 90px 4px 12px;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            cursor: text;
+            transition: border-color 0.2s ease;
+        }
+
+        .search-box:focus-within {
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .search-box .search-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 8px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            animation: tagPop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes tagPop {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .search-tag .tag-remove {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            color: inherit;
+            font-size: 10px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0;
+            opacity: 0.6;
+            transition: all 0.15s;
+        }
+
+        .search-tag .tag-remove:hover {
+            opacity: 1;
+            background: rgba(255,255,255,0.15);
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 120px;
+            padding: 5px 8px;
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-family: var(--font);
+            font-size: 14px;
+            font-weight: 400;
+            outline: none;
+        }
+
+        .search-input::placeholder { color: var(--text-muted); }
+
+        .search-btn {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-family: var(--font);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            letter-spacing: 0.3px;
+        }
+
+        .search-btn:hover {
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.3);
+            color: #fff;
+        }
+
+        .search-btn:active { transform: translateY(-50%) scale(0.98); }
+        .search-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: translateY(-50%); }
+
+        .clear-btn {
+            background: transparent;
+            color: rgba(255, 255, 255, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-family: var(--font);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-left: auto;
+        }
+
+        .clear-btn:hover {
+            color: rgba(255, 255, 255, 0.8);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        /* Tag color palette — free-text tags */
+        .tag-color-0 { background: rgba(59,130,246,0.2); color: #93c5fd; }
+        .tag-color-1 { background: rgba(139,92,246,0.2); color: #c4b5fd; }
+        .tag-color-2 { background: rgba(34,197,94,0.2); color: #86efac; }
+        .tag-color-3 { background: rgba(234,179,8,0.2); color: #fde047; }
+        .tag-color-4 { background: rgba(239,68,68,0.2); color: #fca5a5; }
+
+        /* Category tag colors inside search box */
+        .tag-cat-text { background: rgba(34,211,238,0.2); color: #67e8f9; }
+        .tag-cat-images { background: rgba(34,197,94,0.2); color: #86efac; }
+        .tag-cat-video { background: rgba(234,179,8,0.2); color: #fde047; }
+        .tag-cat-audio { background: rgba(139,92,246,0.2); color: #c4b5fd; }
+        .tag-cat-pdf { background: rgba(239,68,68,0.2); color: #fca5a5; }
+        .tag-cat-office { background: rgba(249,115,22,0.2); color: #fdba74; }
+
+        /* Suggestions label */
+        .suggestions-label {
+            font-size: 14px;
+            color: var(--text);
+            font-weight: 600;
+            margin-right: 4px;
+        }
+
+        /* Filters as suggestion chips */
+        .filters {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-chip {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            padding: 8px 16px;
+            color: rgba(255, 255, 255, 0.7);
+            font-family: var(--font);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .filter-chip:hover {
+            border-color: rgba(255, 255, 255, 0.4);
+            color: #fff;
+        }
+
+        .filter-chip.active {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        /* Results */
+        .results-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            min-height: 20px;
+        }
+
+        .results-count {
+            font-size: 13px;
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+
+        .results-query {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-family: var(--mono);
+        }
+
+        .results-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .result-card {
+            background: var(--surface-glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 18px 20px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: fadeSlideIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+        }
+
+        .result-card:hover {
+            border-color: var(--border-hover);
+            background: var(--surface-hover);
+            transform: translateX(4px);
+        }
+
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .result-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .result-icon svg {
+            width: 20px;
+            height: 20px;
+            stroke: rgba(255, 255, 255, 0.6);
+            stroke-width: 1.5;
+            fill: none;
+        }
+
+        .result-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .result-filename {
+            font-size: 15px;
+            font-weight: 600;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .result-path {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-top: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: var(--mono);
+        }
+
+        .result-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .result-score {
+            font-family: var(--mono);
+            font-size: 13px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .result-tag {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .result-preview {
+            margin-top: 14px;
+            padding: 14px 16px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            font-family: var(--mono);
+            font-size: 12px;
+            line-height: 1.6;
+            color: var(--text-dim);
+            max-height: 140px;
+            overflow: hidden;
+            white-space: pre-wrap;
+            display: none;
+            border: 1px solid rgba(255,255,255,0.04);
+        }
+
+        .result-card.expanded .result-preview { display: block; }
+
+        .result-expand-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: color 0.2s;
+        }
+
+        .result-card:hover .result-expand-hint { color: var(--text-dim); }
+        .result-card.expanded .result-expand-hint .hint-text { display: none; }
+        .result-card.expanded .result-expand-hint .hint-text-collapse { display: inline; }
+        .hint-text-collapse { display: none; }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+        }
+
+        .empty-icon {
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .empty-icon svg {
+            width: 48px;
+            height: 48px;
+            stroke: rgba(255, 255, 255, 0.7);
+            stroke-width: 1.5;
+            fill: none;
+        }
+
+        .empty-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        .empty-desc {
+            font-size: 14px;
+            color: var(--text-dim);
+        }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Keyboard shortcut hint */
+        .kbd {
+            display: inline-block;
+            padding: 2px 6px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-left: 4px;
+        }
+
+        /* No results */
+        .no-results {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--text-dim);
+        }
+
+        /* Loading skeleton */
+        .skeleton {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .skeleton-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 20px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-line {
+            height: 14px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .skeleton-line:last-child { margin-bottom: 0; width: 60%; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+
+        @media (max-width: 640px) {
+            .app { padding: 24px 16px 60px; }
+            .header h1 { font-size: 24px; }
+            .stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .search-input { padding: 16px 120px 16px 44px; font-size: 15px; }
+            .search-btn { padding: 10px 20px; font-size: 13px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="dotted-surface"></div>
+    <div class="dotted-overlay"></div>
+    <div class="app">
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon"><canvas id="logo-canvas" width="120" height="120"></canvas></div>
+                <h1>Embedded Search</h1>
+            </div>
+            <p class="subtitle">Semantic search across your files</p>
+        </header>
+
+        <div class="stats-grid" id="stats-grid"></div>
+
+        <div class="scan-panel" id="scan-panel">
+            <button class="scan-toggle" onclick="toggleScanPanel()">
+                <span>Index Files</span>
+                <span class="scan-toggle-icon">&#9660;</span>
+            </button>
+            <div class="scan-body">
+                <div class="scan-dir-row">
+                    <input class="scan-dir-input" type="text" id="scan-dir-input" placeholder="Scan directory path...">
+                    <button class="scan-dir-btn" id="scan-dir-btn" onclick="changeScanDir()">Change</button>
+                </div>
+                <div class="scan-info" id="scan-info">Loading scan preview...</div>
+                <div class="scan-actions" id="scan-actions">
+                    <button class="scan-btn" id="btn-scan-names" onclick="startScan('names')">
+                        Scan File Names
+                        <span class="scan-btn-sub" id="est-names">estimating...</span>
+                    </button>
+                    <button class="scan-btn" id="btn-scan-content" onclick="startScan('content')">
+                        Scan File Contents
+                        <span class="scan-btn-sub" id="est-content">estimating...</span>
+                    </button>
+                </div>
+                <div class="scan-progress-wrap" id="scan-progress-wrap">
+                    <div class="scan-progress-bar-bg">
+                        <div class="scan-progress-bar" id="scan-progress-bar"></div>
+                    </div>
+                    <div class="scan-progress-details">
+                        <span id="scan-progress-text">0 / 0 files</span>
+                        <span id="scan-eta">ETA: --</span>
+                    </div>
+                    <div class="scan-current-file" id="scan-current-file"></div>
+                    <button class="scan-btn" id="btn-scan-cancel" onclick="cancelScan()" style="margin-top:10px;flex:none;width:auto;padding:6px 18px;color:var(--rose);border-color:rgba(251,113,133,0.3);">Cancel</button>
+                </div>
+                <div class="scan-done-msg" id="scan-done-msg"></div>
+                <div class="scan-error-msg" id="scan-error-msg"></div>
+            </div>
+        </div>
+
+        <div class="search-wrap">
+            <div class="search-box" id="search-box" onclick="document.getElementById('query').focus()">
+                <span id="tags-container"></span>
+                <input class="search-input" type="text" id="query"
+                       placeholder="Search by meaning..." autofocus autocomplete="off">
+            </div>
+            <button class="search-btn" id="search-btn" onclick="doSearch()">Search</button>
+        </div>
+
+        <div class="filters" id="filter-chips">
+            <span class="suggestions-label">Suggestions</span>
+            <button class="filter-chip" data-tag="Text" onclick="toggleFilterTag(this)">Text</button>
+            <button class="filter-chip" data-tag="Images" onclick="toggleFilterTag(this)">Images</button>
+            <button class="filter-chip" data-tag="Video" onclick="toggleFilterTag(this)">Video</button>
+            <button class="filter-chip" data-tag="Audio" onclick="toggleFilterTag(this)">Audio</button>
+            <button class="filter-chip" data-tag="PDF" onclick="toggleFilterTag(this)">PDF</button>
+            <button class="filter-chip" data-tag="Office" onclick="toggleFilterTag(this)">Office</button>
+            <button class="clear-btn" id="clear-btn" onclick="clearSearch()" style="display:none">Clear</button>
+        </div>
+
+        <div class="results-meta" id="results-meta"></div>
+        <div id="results"></div>
+
+        <div id="empty" class="empty-state">
+            <div class="empty-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+            <div class="empty-title">Search your indexed files</div>
+            <div class="empty-desc">Type a query to find files by meaning, not just name <span class="kbd">Enter</span></div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // --- Dotted Surface (Three.js) ---
+        (function() {
+            const container = document.getElementById('dotted-surface');
+            const SEPARATION = 150;
+            const AMOUNTX = 40;
+            const AMOUNTY = 60;
+
+            const scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x08090d, 2000, 10000);
+
+            const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 10000);
+            camera.position.set(0, 355, 1220);
+
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0);
+            container.appendChild(renderer.domElement);
+
+            const positions = [];
+            const colors = [];
+            for (let ix = 0; ix < AMOUNTX; ix++) {
+                for (let iy = 0; iy < AMOUNTY; iy++) {
+                    positions.push(
+                        ix * SEPARATION - (AMOUNTX * SEPARATION) / 2,
+                        0,
+                        iy * SEPARATION - (AMOUNTY * SEPARATION) / 2
+                    );
+                    colors.push(200 / 255, 200 / 255, 200 / 255);
+                }
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 8,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+                sizeAttenuation: true,
+            });
+
+            scene.add(new THREE.Points(geometry, material));
+
+            const posArray = geometry.attributes.position.array;
+            let count = 0;
+            function animate() {
+                requestAnimationFrame(animate);
+                const pos = posArray;
+                let i = 0;
+                for (let ix = 0; ix < AMOUNTX; ix++) {
+                    for (let iy = 0; iy < AMOUNTY; iy++) {
+                        pos[i * 3 + 1] = Math.sin((ix + count) * 0.3) * 50 + Math.sin((iy + count) * 0.5) * 50;
+                        i++;
+                    }
+                }
+                geometry.attributes.position.needsUpdate = true;
+                renderer.render(scene, camera);
+                count += 0.1;
+            }
+            animate();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        })();
+
+        // --- Logo Sphere Animation ---
+        (function() {
+            const c = document.getElementById('logo-canvas');
+            const ctx = c.getContext('2d');
+            const S = 120; // canvas resolution
+            const H = S / 2; // center
+            const DOT_COUNT = 200;
+            const RADIUS = 44;
+            const FOV = 180;
+            const CAM_Z = 180;
+
+            const golden = Math.PI * (3 - Math.sqrt(5));
+            const dots = [];
+            for (let i = 0; i < DOT_COUNT; i++) {
+                const y = 1 - (i / (DOT_COUNT - 1)) * 2;
+                const r = Math.sqrt(1 - y * y);
+                const th = golden * i;
+                dots.push({
+                    ox: Math.cos(th) * r, oy: y, oz: Math.sin(th) * r,
+                    phase: Math.random() * Math.PI * 2,
+                    shimmer: 0.5 + Math.random() * 1.5
+                });
+            }
+
+            const pulse = { ax: 0, ay: 1, az: 0, pos: -1.3, hue: 180 };
+            function resetPulse() {
+                const ax = Math.random() - 0.5, ay = Math.random() - 0.5, az = Math.random() - 0.5;
+                const len = Math.sqrt(ax*ax + ay*ay + az*az) || 1;
+                pulse.ax = ax/len; pulse.ay = ay/len; pulse.az = az/len;
+                pulse.pos = -1.3;
+                pulse.hue = 170 + Math.random() * 30;
+            }
+
+            let angY = 0, angX = 0;
+            function render(t) {
+                const time = t * 0.001;
+                ctx.clearRect(0, 0, S, S);
+                angY += 0.005; angX += 0.002;
+                const cosY = Math.cos(angY), sinY = Math.sin(angY);
+                const cosX = Math.cos(angX), sinX = Math.sin(angX);
+
+                const prog = (pulse.pos + 1.3) / 2.7;
+                pulse.pos += 0.55 * 0.006 * (0.6 + 0.8 * Math.sin(prog * Math.PI));
+                if (pulse.pos > 1.4) resetPulse();
+
+                const proj = [];
+                for (const d of dots) {
+                    let x = d.ox * cosY - d.oz * sinY;
+                    let z = d.ox * sinY + d.oz * cosY;
+                    let y = d.oy;
+                    const y2 = y * cosX - z * sinX;
+                    const z2 = y * sinX + z * cosX;
+                    y = y2; z = z2;
+
+                    const depth = CAM_Z + z * RADIUS;
+                    const scale = FOV / depth;
+                    const sx = H + x * RADIUS * scale;
+                    const sy = H + y * RADIUS * scale;
+
+                    let br = 0.45 + 0.55 * ((z * RADIUS + RADIUS) / (2 * RADIUS));
+                    br += 0.1 * Math.sin(time * d.shimmer + d.phase);
+
+                    let pb = 0;
+                    const along = x * pulse.ax + y * pulse.ay + z * pulse.az;
+                    const dist = Math.abs(along - pulse.pos);
+                    if (dist < 0.22) pb = Math.pow(1 - dist / 0.22, 2);
+
+                    br = Math.min(1, br + pb);
+                    const size = 1.5 * scale + pb * 3 * scale * 0.7;
+                    proj.push({ sx, sy, z: z * RADIUS, br, size, pb });
+                }
+
+                proj.sort((a, b) => a.z - b.z);
+
+                for (const p of proj) {
+                    const alpha = p.br * (0.65 + p.pb * 0.35);
+                    const hue = p.pb > 0.05 ? pulse.hue : 185;
+                    const sat = 75 + p.pb * 25;
+                    const lit = 55 + p.br * 30 + p.pb * 20;
+
+                    if (p.pb > 0.15) {
+                        for (let g = 2; g >= 1; g--) {
+                            ctx.beginPath();
+                            ctx.arc(p.sx, p.sy, p.size * (1 + g * 1.2), 0, Math.PI * 2);
+                            ctx.fillStyle = `hsla(${hue},${sat}%,${lit}%,${alpha * 0.08 / g})`;
+                            ctx.fill();
+                        }
+                    }
+                    ctx.beginPath();
+                    ctx.arc(p.sx, p.sy, p.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `hsla(${hue},${sat}%,${lit}%,${alpha})`;
+                    ctx.fill();
+                }
+
+                const grad = ctx.createRadialGradient(H, H, 0, H, H, RADIUS * 0.7);
+                grad.addColorStop(0, `hsla(185,60%,50%,${0.03 + 0.015 * Math.sin(time * 0.8)})`);
+                grad.addColorStop(1, 'transparent');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(H, H, RADIUS * 0.7, 0, Math.PI * 2);
+                ctx.fill();
+
+                requestAnimationFrame(render);
+            }
+            requestAnimationFrame(render);
+        })();
+
+        // --- App Logic ---
+        let currentFilter = "";
+        const MAX_TAGS = 5;
+        const TAG_COLORS = ["tag-color-0","tag-color-1","tag-color-2","tag-color-3","tag-color-4"];
+        let searchTags = [];
+
+        const ICONS = {
+            total: '<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+            text: '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+            image: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+            video: '<svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>',
+            audio: '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+            pdf: '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+            office: '<svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'
+        };
+        const CAT_MAP = { text: "text", images: "image", video: "video", audio: "audio", pdf: "pdf", office: "office" };
+        const MAX_PREVIEW_LENGTH = 400;
+
+        // Tag data: { label, color, isCategory }
+        function renderTags() {
+            const container = document.getElementById("tags-container");
+            let colorIdx = 0;
+            container.innerHTML = searchTags.map((tag, i) => {
+                let cls;
+                if (tag.isCategory) {
+                    cls = "tag-cat-" + tag.label.toLowerCase();
+                } else {
+                    cls = TAG_COLORS[colorIdx % TAG_COLORS.length];
+                    colorIdx++;
+                }
+                return `
+                <span class="search-tag ${cls}">
+                    ${escapeHtml(tag.label)}
+                    <button class="tag-remove" onclick="event.stopPropagation(); removeTag(${i})">&#10005;</button>
+                </span>`;
+            }).join("");
+
+            // Sync filter chip active states
+            document.querySelectorAll(".filter-chip[data-tag]").forEach(btn => {
+                const isActive = searchTags.some(t => t.isCategory && t.label === btn.dataset.tag);
+                btn.classList.toggle("active", isActive);
+            });
+
+            const input = document.getElementById("query");
+            input.placeholder = searchTags.length >= MAX_TAGS ? "Max tags reached" : (searchTags.length ? "Add more..." : "Search by meaning...");
+            input.disabled = searchTags.length >= MAX_TAGS;
+        }
+
+        function addTag(text, isCategory) {
+            text = text.trim();
+            if (!text || searchTags.length >= MAX_TAGS) return;
+            if (searchTags.some(t => t.label === text)) return;
+            searchTags.push({ label: text, isCategory: !!isCategory });
+            renderTags();
+        }
+
+        function removeTag(index) {
+            searchTags.splice(index, 1);
+            renderTags();
+            document.getElementById("query").focus();
+        }
+
+        function clearSearch() {
+            document.getElementById('query').value = '';
+            searchTags.length = 0;
+            renderTags();
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('results-meta').innerHTML = '';
+            document.getElementById('empty').style.display = '';
+            document.getElementById('clear-btn').style.display = 'none';
+            document.querySelectorAll('.filter-chip[data-tag]').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById('query').focus();
+        }
+
+        function toggleFilterTag(btn) {
+            const label = btn.dataset.tag;
+            const existingIdx = searchTags.findIndex(t => t.isCategory && t.label === label);
+            if (existingIdx >= 0) {
+                removeTag(existingIdx);
+            } else {
+                addTag(label, true);
+            }
+        }
+
+        // Load stats
+        fetch("/api/stats")
+            .then(r => r.json())
+            .then(data => {
+                const grid = document.getElementById("stats-grid");
+                if (!data.total_chunks) {
+                    grid.innerHTML = '<div class="stat-card"><div class="stat-value">0</div><div class="stat-label">Run index.py first</div></div>';
+                    return;
+                }
+                let html = `<div class="stat-card" data-type="total"><div class="stat-icon">${ICONS.total}</div><div class="stat-value">${data.total_files.toLocaleString()}</div><div class="stat-label">Files</div></div>`;
+                const order = ["text", "image", "pdf", "video", "audio", "office"];
+                for (const cat of order) {
+                    const info = (data.categories || {})[cat];
+                    if (info) {
+                        html += `<div class="stat-card" data-type="${cat}"><div class="stat-icon">${ICONS[cat] || ''}</div><div class="stat-value">${info.files.toLocaleString()}</div><div class="stat-label">${cat}</div></div>`;
+                    }
+                }
+                grid.innerHTML = html;
+            });
+
+        document.getElementById("query").addEventListener("keydown", e => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                const val = e.target.value.trim();
+                if (val) {
+                    addTag(val, false);
+                    e.target.value = "";
+                }
+                doSearch();
+            }
+            if (e.key === "Backspace" && !e.target.value && searchTags.length > 0) {
+                e.preventDefault();
+                removeTag(searchTags.length - 1);
+            }
+        });
+
+        async function doSearch() {
+            // Build query from tags + current input
+            const inputVal = document.getElementById("query").value.trim();
+            const textTerms = searchTags.filter(t => !t.isCategory).map(t => t.label);
+            if (inputVal) textTerms.push(inputVal);
+
+            // Category filter from category tags
+            const catTags = searchTags.filter(t => t.isCategory).map(t => t.label.toLowerCase());
+            const category = catTags.length === 1 ? (CAT_MAP[catTags[0]] || null) : null;
+
+            const query = textTerms.join(" ");
+            if (!query && catTags.length === 0) return;
+
+            // If only category tags and no text, search with the category name
+            const searchQuery = query || catTags.join(" ");
+            if (!searchQuery) return;
+
+            const btn = document.getElementById("search-btn");
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>';
+            document.getElementById("empty").style.display = "none";
+            document.getElementById("results-meta").innerHTML = "";
+            document.getElementById("results").innerHTML = `
+                <div class="skeleton">
+                    <div class="skeleton-card"><div class="skeleton-line"></div><div class="skeleton-line"></div></div>
+                    <div class="skeleton-card"><div class="skeleton-line"></div><div class="skeleton-line"></div></div>
+                    <div class="skeleton-card"><div class="skeleton-line"></div><div class="skeleton-line"></div></div>
+                </div>`;
+
+            try {
+                const res = await fetch("/api/search", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query: searchQuery, n_results: 20, category: category }),
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    document.getElementById("results-meta").innerHTML = `<span class="results-count" style="color:var(--rose)">Error: ${escapeHtml(data.error)}</span>`;
+                    document.getElementById("results").innerHTML = "";
+                    return;
+                }
+
+                const results = data.results || [];
+                document.getElementById("results-meta").innerHTML = `
+                    <span class="results-count">${results.length} result${results.length !== 1 ? 's' : ''}</span>
+                    <span class="results-query">"${escapeHtml(searchQuery)}"</span>`;
+                document.getElementById("clear-btn").style.display = '';
+
+                const container = document.getElementById("results");
+                if (results.length === 0) {
+                    container.innerHTML = '<div class="no-results"><p>No results found</p></div>';
+                    return;
+                }
+
+                container.innerHTML = '<div class="results-list">' + results.map((r, i) => {
+                    const meta = r.metadata || {};
+                    const cat = meta.category || "text";
+                    const score = (r.score * 100).toFixed(1);
+                    const filename = meta.filename || "";
+                    const folder = meta.relative_path || meta.folder || "";
+                    const doc = r.document || "";
+                    const preview = doc.length > MAX_PREVIEW_LENGTH ? doc.substring(0, MAX_PREVIEW_LENGTH) + "..." : doc;
+                    const icon = ICONS[cat] || "&#128196;";
+
+                    return `
+                        <div class="result-card" onclick="this.classList.toggle('expanded')" style="animation-delay:${i * 0.04}s">
+                            <div class="result-top">
+                                <div class="result-icon icon-${cat}">${icon}</div>
+                                <div class="result-info">
+                                    <div class="result-filename">${escapeHtml(filename)}</div>
+                                    <div class="result-path">${escapeHtml(folder)}</div>
+                                </div>
+                                <div class="result-right">
+                                    <span class="result-score">${score}%</span>
+                                    <span class="result-tag tag-${cat}">${cat}</span>
+                                </div>
+                            </div>
+                            ${preview ? `
+                            <div class="result-expand-hint">
+                                <span class="hint-text">&#9662; preview</span>
+                                <span class="hint-text-collapse">&#9652; collapse</span>
+                            </div>
+                            <div class="result-preview">${escapeHtml(preview)}</div>` : ''}
+                        </div>`;
+                }).join("") + '</div>';
+
+            } catch (err) {
+                document.getElementById("results-meta").innerHTML = `<span class="results-count" style="color:var(--rose)">Error: ${err.message}</span>`;
+                document.getElementById("results").innerHTML = "";
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Search";
+            }
+        }
+
+        const _escapeDiv = document.createElement("div");
+        function escapeHtml(text) {
+            _escapeDiv.textContent = text;
+            return _escapeDiv.innerHTML;
+        }
+
+        // --- Scan Panel Logic ---
+        let _scanPollTimer = null;
+
+        function toggleScanPanel() {
+            document.getElementById("scan-panel").classList.toggle("open");
+        }
+
+        function formatEta(seconds) {
+            if (seconds <= 0) return "done";
+            if (seconds < 60) return seconds + "s";
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            if (m < 60) return m + "m " + s + "s";
+            const h = Math.floor(m / 60);
+            return h + "h " + (m % 60) + "m";
+        }
+
+        function formatDuration(seconds) {
+            if (seconds < 60) return seconds + "s";
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return m + "m " + s + "s";
+        }
+
+        function loadScanPreview() {
+            document.getElementById("scan-info").textContent = "Loading scan preview...";
+            document.getElementById("est-names").textContent = "estimating...";
+            document.getElementById("est-content").textContent = "estimating...";
+
+            fetch("/api/scan/preview")
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById("scan-info").textContent = "Error: " + data.error;
+                        return;
+                    }
+                    document.getElementById("scan-dir-input").value = data.root;
+
+                    const info = document.getElementById("scan-info");
+                    info.innerHTML =
+                        `Total files: <strong>${data.total_files.toLocaleString()}</strong> &nbsp;|&nbsp; ` +
+                        `Readable: <strong>${data.readable_files.toLocaleString()}</strong>`;
+
+                    const estN = data.estimates.names;
+                    document.getElementById("est-names").textContent =
+                        `${estN.files.toLocaleString()} files · ~${formatEta(estN.seconds)}`;
+
+                    const estC = data.estimates.content;
+                    document.getElementById("est-content").textContent =
+                        `${estC.files.toLocaleString()} files · ~${formatEta(estC.seconds)}`;
+                })
+                .catch(() => {
+                    document.getElementById("scan-info").textContent = "Could not load scan preview.";
+                });
+        }
+
+        // Load on page start
+        loadScanPreview();
+
+        function changeScanDir() {
+            const input = document.getElementById("scan-dir-input");
+            const newRoot = input.value.trim();
+            if (!newRoot) return;
+
+            const btn = document.getElementById("scan-dir-btn");
+            btn.disabled = true;
+            btn.textContent = "...";
+
+            fetch("/api/scan/set-root", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ root: newRoot }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    loadScanPreview();
+                }
+            })
+            .catch(err => alert(err.message))
+            .finally(() => {
+                btn.disabled = false;
+                btn.textContent = "Change";
+            });
+        }
+
+        // Allow pressing Enter in the dir input
+        document.getElementById("scan-dir-input").addEventListener("keydown", e => {
+            if (e.key === "Enter") { e.preventDefault(); changeScanDir(); }
+        });
+
+        function cancelScan() {
+            const btn = document.getElementById("btn-scan-cancel");
+            btn.disabled = true;
+            btn.textContent = "Cancelling...";
+            fetch("/api/scan/cancel", { method: "POST" })
+                .then(r => r.json())
+                .catch(() => {});
+        }
+
+        function startScan(type) {
+            document.getElementById("btn-scan-names").disabled = true;
+            document.getElementById("btn-scan-content").disabled = true;
+            document.getElementById("scan-progress-wrap").classList.add("active");
+            document.getElementById("scan-done-msg").classList.remove("active");
+            document.getElementById("scan-error-msg").classList.remove("active");
+            document.getElementById("scan-progress-bar").style.width = "0%";
+            document.getElementById("scan-progress-bar").classList.remove("done");
+            document.getElementById("scan-progress-text").textContent = "Starting...";
+            document.getElementById("scan-eta").textContent = "ETA: calculating...";
+            document.getElementById("scan-current-file").textContent = "";
+
+            // Open the panel if closed
+            document.getElementById("scan-panel").classList.add("open");
+
+            fetch("/api/scan/start", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ type: type }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById("scan-error-msg").textContent = data.error;
+                    document.getElementById("scan-error-msg").classList.add("active");
+                    document.getElementById("btn-scan-names").disabled = false;
+                    document.getElementById("btn-scan-content").disabled = false;
+                    document.getElementById("scan-progress-wrap").classList.remove("active");
+                    return;
+                }
+                // Start polling
+                pollScanStatus();
+            })
+            .catch(err => {
+                document.getElementById("scan-error-msg").textContent = err.message;
+                document.getElementById("scan-error-msg").classList.add("active");
+                document.getElementById("btn-scan-names").disabled = false;
+                document.getElementById("btn-scan-content").disabled = false;
+            });
+        }
+
+        function pollScanStatus() {
+            if (_scanPollTimer) clearTimeout(_scanPollTimer);
+
+            fetch("/api/scan/status")
+                .then(r => r.json())
+                .then(s => {
+                    const pct = s.total > 0 ? Math.round((s.progress / s.total) * 100) : 0;
+                    document.getElementById("scan-progress-bar").style.width = pct + "%";
+
+                    let progressText = `${s.progress.toLocaleString()} / ${s.total.toLocaleString()} files`;
+                    if (s.type === "content" && s.chunks_done > 0) {
+                        progressText += ` (${s.chunks_done.toLocaleString()} chunks)`;
+                    }
+                    document.getElementById("scan-progress-text").textContent = progressText;
+                    document.getElementById("scan-eta").textContent = "ETA: " + formatEta(s.eta_seconds);
+                    document.getElementById("scan-current-file").textContent = s.current_file || "";
+
+                    if (s.done || (!s.running && s.progress > 0)) {
+                        // Done or cancelled
+                        const wasCancelled = s.cancelled;
+                        const pctFinal = s.total > 0 ? Math.round((s.progress / s.total) * 100) : 100;
+                        document.getElementById("scan-progress-bar").style.width = (wasCancelled ? pctFinal : 100) + "%";
+                        if (!wasCancelled) document.getElementById("scan-progress-bar").classList.add("done");
+                        document.getElementById("scan-eta").textContent = formatDuration(s.elapsed);
+
+                        let msg = wasCancelled
+                            ? `Scan cancelled. ${s.progress.toLocaleString()} / ${s.total.toLocaleString()} files processed`
+                            : `Scan complete! ${s.progress.toLocaleString()} files processed`;
+                        if (s.type === "content") msg += `, ${s.chunks_done.toLocaleString()} chunks embedded`;
+                        if (s.errors > 0) msg += `, ${s.errors} errors`;
+                        if (s.skipped > 0) msg += `, ${s.skipped} skipped`;
+                        msg += ` in ${formatDuration(s.elapsed)}.`;
+                        document.getElementById("scan-done-msg").textContent = msg;
+                        document.getElementById("scan-done-msg").classList.add("active");
+                        document.getElementById("scan-current-file").textContent = "";
+
+                        // Reset cancel button
+                        const cancelBtn = document.getElementById("btn-scan-cancel");
+                        cancelBtn.disabled = false;
+                        cancelBtn.textContent = "Cancel";
+
+                        if (s.error_message) {
+                            document.getElementById("scan-error-msg").textContent = s.error_message;
+                            document.getElementById("scan-error-msg").classList.add("active");
+                        }
+
+                        document.getElementById("btn-scan-names").disabled = false;
+                        document.getElementById("btn-scan-content").disabled = false;
+
+                        // Refresh stats
+                        fetch("/api/stats").then(r => r.json()).then(data => {
+                            const grid = document.getElementById("stats-grid");
+                            if (!data.total_chunks) return;
+                            let html = `<div class="stat-card" data-type="total"><div class="stat-icon">${ICONS.total}</div><div class="stat-value">${data.total_files.toLocaleString()}</div><div class="stat-label">Files</div></div>`;
+                            const order = ["text", "image", "pdf", "video", "audio", "office"];
+                            for (const cat of order) {
+                                const info = (data.categories || {})[cat];
+                                if (info) html += `<div class="stat-card" data-type="${cat}"><div class="stat-icon">${ICONS[cat] || ''}</div><div class="stat-value">${info.files.toLocaleString()}</div><div class="stat-label">${cat}</div></div>`;
+                            }
+                            grid.innerHTML = html;
+                        });
+                        return;
+                    }
+
+                    // Keep polling
+                    _scanPollTimer = setTimeout(pollScanStatus, 1000);
+                })
+                .catch(() => {
+                    _scanPollTimer = setTimeout(pollScanStatus, 2000);
+                });
+        }
+
+        // Check if a scan is already running on page load
+        fetch("/api/scan/status")
+            .then(r => r.json())
+            .then(s => {
+                if (s.running) {
+                    document.getElementById("scan-panel").classList.add("open");
+                    document.getElementById("btn-scan-names").disabled = true;
+                    document.getElementById("btn-scan-content").disabled = true;
+                    document.getElementById("scan-progress-wrap").classList.add("active");
+                    pollScanStatus();
+                }
+            })
+            .catch(() => {});
+
+        // Register service worker for PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>
